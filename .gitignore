@@ -1,5 +1,13 @@
 #ignore temporary files
-	.cproject
-	.mxproject
-	.project
-	.settings/
+.cproject
+.mxproject
+.project
+.settings/*
+Debug/
+Drivers/
+F474RE-SOC Debug.launch
+Middlewares/
+STM32G474RETX_FLASH.ld
+STM32G474RETX_RAM.ld
+micro_ros_stm32cubemx_utils/
+Core/Startup/*
