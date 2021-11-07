@@ -62,6 +62,7 @@
 /* Private variables ---------------------------------------------------------*/
 /* USER CODE BEGIN Variables */
 extern UART_HandleTypeDef hlpuart1;
+double temperature;
 
 /* Subscriber declaration */
 rcl_subscription_t cmd_vel_sub;
@@ -84,6 +85,18 @@ const osThreadAttr_t microROSTask_attributes = {
   .name = "microROSTask",
   .priority = (osPriority_t) osPriorityNormal,
   .stack_size = 3000 * 4
+};
+/* Definitions for tempControlTask */
+osThreadId_t tempControlTaskHandle;
+const osThreadAttr_t tempControlTask_attributes = {
+  .name = "tempControlTask",
+  .priority = (osPriority_t) osPriorityLow,
+  .stack_size = 128 * 4
+};
+/* Definitions for temperatureMutex */
+osMutexId_t temperatureMutexHandle;
+const osMutexAttr_t temperatureMutex_attributes = {
+  .name = "temperatureMutex"
 };
 
 /* Private function prototypes -----------------------------------------------*/
@@ -109,6 +122,7 @@ extern void UTILS_NanosecondsToTimespec( int64_t llSource, struct timespec * con
 /* USER CODE END FunctionPrototypes */
 
 void microROSTaskFunction(void *argument);
+void temperatureControlTask(void *argument);
 
 void MX_FREERTOS_Init(void); /* (MISRA C 2004 rule 8.1) */
 
@@ -121,6 +135,9 @@ void MX_FREERTOS_Init(void) {
   /* USER CODE BEGIN Init */
 
   /* USER CODE END Init */
+  /* Create the mutex(es) */
+  /* creation of temperatureMutex */
+  temperatureMutexHandle = osMutexNew(&temperatureMutex_attributes);
 
   /* USER CODE BEGIN RTOS_MUTEX */
   /* add mutexes, ... */
@@ -141,6 +158,9 @@ void MX_FREERTOS_Init(void) {
   /* Create the thread(s) */
   /* creation of microROSTask */
   microROSTaskHandle = osThreadNew(microROSTaskFunction, NULL, &microROSTask_attributes);
+
+  /* creation of tempControlTask */
+  tempControlTaskHandle = osThreadNew(temperatureControlTask, NULL, &tempControlTask_attributes);
 
   /* USER CODE BEGIN RTOS_THREADS */
   /* add threads, ... */
@@ -236,13 +256,37 @@ void microROSTaskFunction(void *argument)
   /* USER CODE END microROSTaskFunction */
 }
 
+/* USER CODE BEGIN Header_temperatureControlTask */
+/**
+* @brief Function implementing the tempControlTask thread.
+* @param argument: Not used
+* @retval None
+*/
+/* USER CODE END Header_temperatureControlTask */
+void temperatureControlTask(void *argument)
+{
+  /* USER CODE BEGIN temperatureControlTask */
+  /* Infinite loop */
+  for(;;)
+  {
+	  // get temperature
+	  if (osMutexAcquire(temperatureMutexHandle, 100) == osOK)
+	  {
+		  HAL_GPIO_TogglePin(LD2_GPIO_Port, LD2_Pin);
+		  osMutexRelease(temperatureMutexHandle);
+	  }
+    osDelay(10000);
+  }
+  /* USER CODE END temperatureControlTask */
+}
+
 /* Private application code --------------------------------------------------*/
 /* USER CODE BEGIN Application */
 void timer_callback(rcl_timer_t * timer, int64_t last_call_time)
 {
 	if (timer != NULL) {
 		// Blink the LED1 (yellow) for debugging
-		HAL_GPIO_TogglePin(LD2_GPIO_Port , LD2_Pin);
+		//HAL_GPIO_TogglePin(LD2_GPIO_Port , LD2_Pin);
 
 		// Fill the message timestamp
 		struct timespec ts;
@@ -254,8 +298,13 @@ void timer_callback(rcl_timer_t * timer, int64_t last_call_time)
 		// Create the Header
 		temperature_msg.header.stamp.sec = ts.tv_sec;
 		temperature_msg.header.stamp.nanosec = ts.tv_nsec;
-		temperature_msg.temperature = get_temperature();
-
+		//temperature_msg.temperature = get_temperature();
+		if (osMutexAcquire(temperatureMutexHandle, 10) == osOK)
+		{
+			temperature = get_temperature();
+			temperature_msg.temperature = temperature;
+			osMutexRelease(temperatureMutexHandle);
+		}
 		rcl_ret_t ret = rcl_publish(&temperature_state_pub, &temperature_msg, NULL);
 		if (ret != RCL_RET_OK)
 		{
