@@ -64,18 +64,12 @@
 extern UART_HandleTypeDef hlpuart1;
 double temperature;
 
-/* Subscriber declaration */
-rcl_subscription_t cmd_vel_sub;
-
 /* Publisher declaration */
-rcl_publisher_t joint_state_pub;
 rcl_publisher_t temperature_state_pub;
 /* ROS timer declaration */
 rcl_timer_t timer;
 
 /* Messages declaration */
-sensor_msgs__msg__JointState joint_state_msg;
-geometry_msgs__msg__Twist cmd_vel_msg;
 sensor_msgs__msg__Temperature temperature_msg;
 
 /* USER CODE END Variables */
@@ -234,8 +228,8 @@ void microROSTaskFunction(void *argument)
 	  // tempreature_msg message allocation. Described in https://micro.ros.org/docs/tutorials/advanced/handling_type_memory/
 
 	  temperature_msg.header.frame_id.capacity = 20;
-	  temperature_msg.header.frame_id.data = (char*) pvPortMalloc(joint_state_msg.header.frame_id.capacity  * sizeof(char));
-	  temperature_msg.header.frame_id.size = strlen(joint_state_msg.header.frame_id.data);
+	  temperature_msg.header.frame_id.data = (char*) pvPortMalloc(temperature_msg.header.frame_id.capacity  * sizeof(char));
+	  temperature_msg.header.frame_id.size = strlen(temperature_msg.header.frame_id.data);
 	  temperature_msg.temperature = -1;
 	  temperature_msg.variance = 0;
 	  // Create a timer
@@ -269,13 +263,17 @@ void temperatureControlTask(void *argument)
   /* Infinite loop */
   for(;;)
   {
-	  // get temperature
-	  if (osMutexAcquire(temperatureMutexHandle, 100) == osOK)
+	  if(osThreadFlagsWait(READ_TEMPERATURE, osFlagsWaitAny, 3000)!=osFlagsErrorTimeout)
 	  {
-		  HAL_GPIO_TogglePin(LD2_GPIO_Port, LD2_Pin);
-		  osMutexRelease(temperatureMutexHandle);
+		  // get temperature
+		  if (osMutexAcquire(temperatureMutexHandle, 100) == osOK)
+		  {
+			  HAL_GPIO_TogglePin(LD2_GPIO_Port, LD2_Pin);
+			  temperature = get_temperature();
+			  osMutexRelease(temperatureMutexHandle);
+		  }
 	  }
-    osDelay(10000);
+    osDelay(1);
   }
   /* USER CODE END temperatureControlTask */
 }
@@ -298,10 +296,8 @@ void timer_callback(rcl_timer_t * timer, int64_t last_call_time)
 		// Create the Header
 		temperature_msg.header.stamp.sec = ts.tv_sec;
 		temperature_msg.header.stamp.nanosec = ts.tv_nsec;
-		//temperature_msg.temperature = get_temperature();
 		if (osMutexAcquire(temperatureMutexHandle, 10) == osOK)
 		{
-			temperature = get_temperature();
 			temperature_msg.temperature = temperature;
 			osMutexRelease(temperatureMutexHandle);
 		}

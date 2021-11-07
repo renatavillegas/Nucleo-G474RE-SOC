@@ -74,7 +74,7 @@ void Error_Handler(void);
 #define T_SWO_Pin GPIO_PIN_3
 #define T_SWO_GPIO_Port GPIOB
 /* USER CODE BEGIN Private defines */
-
+#define READ_TEMPERATURE 0x0001
 /* USER CODE END Private defines */
 
 #ifdef __cplusplus
