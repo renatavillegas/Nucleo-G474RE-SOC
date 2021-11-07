@@ -40,6 +40,7 @@
 #include <sensor_msgs/msg/joint_state.h>             // for the encoder msg
 #include <geometry_msgs/msg/twist.h>                 // for the motors control
 #include <sensor_msgs/msg/temperature.h>             // for the temperature msg
+#include "LM75.h"
 
 /* USER CODE END Includes */
 
@@ -253,7 +254,7 @@ void timer_callback(rcl_timer_t * timer, int64_t last_call_time)
 		// Create the Header
 		temperature_msg.header.stamp.sec = ts.tv_sec;
 		temperature_msg.header.stamp.nanosec = ts.tv_nsec;
-		temperature_msg.temperature = 1;
+		temperature_msg.temperature = get_temperature();
 
 		rcl_ret_t ret = rcl_publish(&temperature_state_pub, &temperature_msg, NULL);
 		if (ret != RCL_RET_OK)
