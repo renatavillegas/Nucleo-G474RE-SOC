@@ -62,7 +62,17 @@
 /* Private variables ---------------------------------------------------------*/
 /* USER CODE BEGIN Variables */
 extern UART_HandleTypeDef hlpuart1;
+
+/*global variables - temperature, battery state, battery SOC*/
 double temperature;
+typedef struct batteryState{
+	float tension;
+	float current;
+} batteryState;
+typedef struct batterySoc{
+	batteryState currentState;
+	float soc;
+} batterySoc;
 
 /* Publisher declaration */
 rcl_publisher_t temperature_state_pub;
@@ -85,6 +95,20 @@ osThreadId_t tempControlTaskHandle;
 const osThreadAttr_t tempControlTask_attributes = {
   .name = "tempControlTask",
   .priority = (osPriority_t) osPriorityLow,
+  .stack_size = 128 * 4
+};
+/* Definitions for BatteryState */
+osThreadId_t BatteryStateHandle;
+const osThreadAttr_t BatteryState_attributes = {
+  .name = "BatteryState",
+  .priority = (osPriority_t) osPriorityNormal,
+  .stack_size = 128 * 4
+};
+/* Definitions for SocTask */
+osThreadId_t SocTaskHandle;
+const osThreadAttr_t SocTask_attributes = {
+  .name = "SocTask",
+  .priority = (osPriority_t) osPriorityHigh,
   .stack_size = 128 * 4
 };
 /* Definitions for temperatureMutex */
@@ -117,6 +141,8 @@ extern void UTILS_NanosecondsToTimespec( int64_t llSource, struct timespec * con
 
 void microROSTaskFunction(void *argument);
 void temperatureControlTask(void *argument);
+void BatteryStateFunction(void *argument);
+void SocTaskFunction(void *argument);
 
 void MX_FREERTOS_Init(void); /* (MISRA C 2004 rule 8.1) */
 
@@ -155,6 +181,12 @@ void MX_FREERTOS_Init(void) {
 
   /* creation of tempControlTask */
   tempControlTaskHandle = osThreadNew(temperatureControlTask, NULL, &tempControlTask_attributes);
+
+  /* creation of BatteryState */
+  BatteryStateHandle = osThreadNew(BatteryStateFunction, NULL, &BatteryState_attributes);
+
+  /* creation of SocTask */
+  SocTaskHandle = osThreadNew(SocTaskFunction, NULL, &SocTask_attributes);
 
   /* USER CODE BEGIN RTOS_THREADS */
   /* add threads, ... */
@@ -276,6 +308,42 @@ void temperatureControlTask(void *argument)
     osDelay(1);
   }
   /* USER CODE END temperatureControlTask */
+}
+
+/* USER CODE BEGIN Header_BatteryStateFunction */
+/**
+* @brief Function implementing the BatteryState thread.
+* @param argument: Not used
+* @retval None
+*/
+/* USER CODE END Header_BatteryStateFunction */
+void BatteryStateFunction(void *argument)
+{
+  /* USER CODE BEGIN BatteryStateFunction */
+  /* Infinite loop */
+  for(;;)
+  {
+    osDelay(1);
+  }
+  /* USER CODE END BatteryStateFunction */
+}
+
+/* USER CODE BEGIN Header_SocTaskFunction */
+/**
+* @brief Function implementing the SocTask thread.
+* @param argument: Not used
+* @retval None
+*/
+/* USER CODE END Header_SocTaskFunction */
+void SocTaskFunction(void *argument)
+{
+  /* USER CODE BEGIN SocTaskFunction */
+  /* Infinite loop */
+  for(;;)
+  {
+    osDelay(1);
+  }
+  /* USER CODE END SocTaskFunction */
 }
 
 /* Private application code --------------------------------------------------*/
