@@ -37,9 +37,11 @@
 
 #include <time.h>
 
-#include <sensor_msgs/msg/joint_state.h>             // for the encoder msg
-#include <geometry_msgs/msg/twist.h>                 // for the motors control
+
 #include <sensor_msgs/msg/temperature.h>             // for the temperature msg
+#include <sensor_msgs/msg/battery_state.h>			 // for the battery state;
+
+/*sensor's libraries*/
 #include "LM75.h"
 
 /* USER CODE END Includes */
@@ -70,18 +72,21 @@ typedef struct batteryState{
 	float current;
 } batteryState;
 typedef struct batterySoc{
-	batteryState currentState;
+	batteryState bat1State;
+	batteryState bat2State;
 	float soc;
 } batterySoc;
+batterySoc actualSoc;
 
 /* Publisher declaration */
 rcl_publisher_t temperature_state_pub;
+rcl_publisher_t battery_state_pub;
 /* ROS timer declaration */
 rcl_timer_t timer;
 
 /* Messages declaration */
 sensor_msgs__msg__Temperature temperature_msg;
-
+sensor_msgs__msg__BatteryState battery_state_msg;
 /* USER CODE END Variables */
 /* Definitions for microROSTask */
 osThreadId_t microROSTaskHandle;
@@ -264,6 +269,23 @@ void microROSTaskFunction(void *argument)
 	  temperature_msg.header.frame_id.size = strlen(temperature_msg.header.frame_id.data);
 	  temperature_msg.temperature = -1;
 	  temperature_msg.variance = 0;
+
+	  // create battery_state publisher
+	  rclc_publisher_init_default(
+		&battery_state_pub,
+		&node,
+		ROSIDL_GET_MSG_TYPE_SUPPORT(sensor_msgs, msg, BatteryState),
+		"/battery_state");
+	  // battery_state_msg allocation
+	  battery_state_msg.header.frame_id.capacity = 20;
+	  battery_state_msg.header.frame_id.data = (char*) pvPortMalloc(battery_state_msg.header.frame_id.capacity  * sizeof(char));
+	  battery_state_msg.header.frame_id.size = strlen(battery_state_msg.header.frame_id.data);
+	  battery_state_msg.voltage = actualSoc.bat1State.tension;
+	  battery_state_msg.current = actualSoc.bat1State.current;
+	  battery_state_msg.temperature = temperature;
+	  battery_state_msg.power_supply_health = sensor_msgs__msg__BatteryState__POWER_SUPPLY_STATUS_DISCHARGING;
+	  battery_state_msg.power_supply_technology = sensor_msgs__msg__BatteryState__POWER_SUPPLY_TECHNOLOGY_LION;
+
 	  // Create a timer
 	  rclc_timer_init_default(&timer, &support, RCL_MS_TO_NS(10), timer_callback);
 
@@ -273,6 +295,8 @@ void microROSTaskFunction(void *argument)
 
 	  // Run executor
 	  rclc_executor_spin(&executor);
+
+
 
   /* Infinite loop */
   for(;;)
@@ -374,6 +398,13 @@ void timer_callback(rcl_timer_t * timer, int64_t last_call_time)
 		{
 		  printf("Error publishing temperate (line %d)\n", __LINE__);
 		}
+
+		  // Publish message
+		  ret = rcl_publish(&battery_state_pub, &battery_state_msg, NULL);
+		  if (ret != RCL_RET_OK)
+		  {
+			  printf("Error publishing battery state (line %d)\n", __LINE__);
+		  }
 
 
 	}
