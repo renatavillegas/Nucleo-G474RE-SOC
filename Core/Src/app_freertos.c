@@ -66,17 +66,18 @@
 extern UART_HandleTypeDef hlpuart1;
 
 /*global variables - temperature, battery state, battery SOC*/
-double temperature;
-typedef struct batteryState{
+typedef struct battery{
+	int id;
 	float tension;
+	float adcConstant;
+} battery;
+typedef struct batteryCellSoc{
+	battery batteryCell[2];
 	float current;
-} batteryState;
-typedef struct batterySoc{
-	batteryState bat1State;
-	batteryState bat2State;
+	float temperature;
 	float soc;
 } batterySoc;
-batterySoc actualSoc;
+batterySoc soc;
 
 /* Publisher declaration */
 rcl_publisher_t temperature_state_pub;
@@ -116,10 +117,10 @@ const osThreadAttr_t SocTask_attributes = {
   .priority = (osPriority_t) osPriorityHigh,
   .stack_size = 128 * 4
 };
-/* Definitions for temperatureMutex */
-osMutexId_t temperatureMutexHandle;
-const osMutexAttr_t temperatureMutex_attributes = {
-  .name = "temperatureMutex"
+/* Definitions for batteryCellSocMutex */
+osMutexId_t batteryCellSocMutexHandle;
+const osMutexAttr_t batteryCellSocMutex_attributes = {
+  .name = "batteryCellSocMutex"
 };
 
 /* Private function prototypes -----------------------------------------------*/
@@ -161,8 +162,8 @@ void MX_FREERTOS_Init(void) {
 
   /* USER CODE END Init */
   /* Create the mutex(es) */
-  /* creation of temperatureMutex */
-  temperatureMutexHandle = osMutexNew(&temperatureMutex_attributes);
+  /* creation of batteryCellSocMutex */
+  batteryCellSocMutexHandle = osMutexNew(&batteryCellSocMutex_attributes);
 
   /* USER CODE BEGIN RTOS_MUTEX */
   /* add mutexes, ... */
@@ -240,7 +241,11 @@ void microROSTaskFunction(void *argument)
 
 	  allocator = rcl_get_default_allocator();
 	  init_options = rcl_get_zero_initialized_init_options();
-	  rcl_init_options_init(&init_options, allocator);
+	  rcl_ret_t ret = rcl_init_options_init(&init_options, allocator);
+	  if(ret != RCL_RET_OK)
+	  {
+		  printf("Error on init options (line %d)\n", __LINE__);
+	  }
 
 	  // create init_options
 	  rclc_support_init_with_options(&support, 0, NULL, &init_options, &allocator);
@@ -280,9 +285,11 @@ void microROSTaskFunction(void *argument)
 	  battery_state_msg.header.frame_id.capacity = 20;
 	  battery_state_msg.header.frame_id.data = (char*) pvPortMalloc(battery_state_msg.header.frame_id.capacity  * sizeof(char));
 	  battery_state_msg.header.frame_id.size = strlen(battery_state_msg.header.frame_id.data);
-	  battery_state_msg.voltage = actualSoc.bat1State.tension;
-	  battery_state_msg.current = actualSoc.bat1State.current;
-	  battery_state_msg.temperature = temperature;
+
+	  battery_state_msg.temperature = soc.temperature;
+
+	  battery_state_msg.voltage = soc.batteryCell[1].tension + soc.batteryCell[2].tension;
+	  battery_state_msg.current = soc.current;
 	  battery_state_msg.power_supply_health = sensor_msgs__msg__BatteryState__POWER_SUPPLY_STATUS_DISCHARGING;
 	  battery_state_msg.power_supply_technology = sensor_msgs__msg__BatteryState__POWER_SUPPLY_TECHNOLOGY_LION;
 
@@ -322,11 +329,11 @@ void temperatureControlTask(void *argument)
 	  if(osThreadFlagsWait(READ_TEMPERATURE, osFlagsWaitAny, 3000)!=osFlagsErrorTimeout)
 	  {
 		  // get temperature
-		  if (osMutexAcquire(temperatureMutexHandle, 100) == osOK)
+		  if (osMutexAcquire(batteryCellSocMutexHandle, 100) == osOK)
 		  {
 			  HAL_GPIO_TogglePin(LD2_GPIO_Port, LD2_Pin);
-			  temperature = get_temperature();
-			  osMutexRelease(temperatureMutexHandle);
+			  soc.temperature = get_temperature();
+			  osMutexRelease(batteryCellSocMutexHandle);
 		  }
 	  }
     osDelay(1);
@@ -386,21 +393,28 @@ void timer_callback(rcl_timer_t * timer, int64_t last_call_time)
 		//clock_gettime(CLOCK_REALTIME, &ts);
 
 		// Create the Header
-		temperature_msg.header.stamp.sec = ts.tv_sec;
-		temperature_msg.header.stamp.nanosec = ts.tv_nsec;
-		if (osMutexAcquire(temperatureMutexHandle, 10) == osOK)
-		{
-			temperature_msg.temperature = temperature;
-			osMutexRelease(temperatureMutexHandle);
-		}
-		rcl_ret_t ret = rcl_publish(&temperature_state_pub, &temperature_msg, NULL);
-		if (ret != RCL_RET_OK)
-		{
-		  printf("Error publishing temperate (line %d)\n", __LINE__);
-		}
+//		temperature_msg.header.stamp.sec = ts.tv_sec;
+//		temperature_msg.header.stamp.nanosec = ts.tv_nsec;
+//		if (osMutexAcquire(batteryCellSocMutexHandle, 10) == osOK)
+//		{
+//			temperature_msg.temperature = temperature;
+//			osMutexRelease(batteryCellSocMutexHandle);
+//		}
+//		rcl_ret_t ret = rcl_publish(&temperature_state_pub, &temperature_msg, NULL);
+//		if (ret != RCL_RET_OK)
+//		{
+//		  printf("Error publishing temperate (line %d)\n", __LINE__);
+//		}
 
 		  // Publish message
-		  ret = rcl_publish(&battery_state_pub, &battery_state_msg, NULL);
+		 battery_state_msg.header.stamp.sec = ts.tv_sec;
+		 battery_state_msg.header.stamp.nanosec = ts.tv_nsec;
+		 if (osMutexAcquire(batteryCellSocMutexHandle, 10) == osOK)
+		 {
+			 battery_state_msg.temperature = soc.temperature;
+			 osMutexRelease(batteryCellSocMutexHandle);
+		 }
+		 rcl_ret_t ret = rcl_publish(&battery_state_pub, &battery_state_msg, NULL);
 		  if (ret != RCL_RET_OK)
 		  {
 			  printf("Error publishing battery state (line %d)\n", __LINE__);
