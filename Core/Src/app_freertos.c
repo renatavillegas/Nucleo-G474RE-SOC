@@ -66,7 +66,7 @@
 
 extern UART_HandleTypeDef hlpuart1;
 extern ADC_HandleTypeDef hadc1;
-
+extern ADC_HandleTypeDef hadc2;
 /*global variables - temperature, battery state, battery SOC*/
 typedef struct battery{
 	int id;

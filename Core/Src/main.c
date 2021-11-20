@@ -97,6 +97,7 @@ int main(void)
   MX_I2C1_Init();
   MX_TIM7_Init();
   MX_ADC1_Init();
+  MX_ADC2_Init();
   /* USER CODE BEGIN 2 */
   HAL_TIM_Base_Start_IT(&htim7);
   /* USER CODE END 2 */
