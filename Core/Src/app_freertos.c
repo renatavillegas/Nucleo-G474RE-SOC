@@ -63,7 +63,9 @@
 
 /* Private variables ---------------------------------------------------------*/
 /* USER CODE BEGIN Variables */
+
 extern UART_HandleTypeDef hlpuart1;
+extern ADC_HandleTypeDef hadc1;
 
 /*global variables - temperature, battery state, battery SOC*/
 typedef struct battery{
@@ -352,9 +354,24 @@ void BatteryStateFunction(void *argument)
 {
   /* USER CODE BEGIN BatteryStateFunction */
   /* Infinite loop */
+  uint16_t raw;
+  float v1;
   for(;;)
   {
-    osDelay(1);
+	  // get adc value
+	  HAL_ADC_Start(&hadc1);
+	  HAL_ADC_PollForConversion(&hadc1, HAL_MAX_DELAY);
+	  raw = HAL_ADC_GetValue(&hadc1);
+	  //convert to V
+	  v1 = (float)raw*(3.6*66/(56*4096));
+	  //acquire mutex to write in the soc state
+	  if (osMutexAcquire(batteryCellSocMutexHandle, 10) == osOK)
+	  {
+		 soc.batteryCell[1].tension = v1;
+		 osMutexRelease(batteryCellSocMutexHandle);
+	  }
+
+	  osDelay(100);
   }
   /* USER CODE END BatteryStateFunction */
 }
@@ -412,6 +429,7 @@ void timer_callback(rcl_timer_t * timer, int64_t last_call_time)
 		 if (osMutexAcquire(batteryCellSocMutexHandle, 10) == osOK)
 		 {
 			 battery_state_msg.temperature = soc.temperature;
+			 battery_state_msg.voltage = soc.batteryCell[1].tension;
 			 osMutexRelease(batteryCellSocMutexHandle);
 		 }
 		 rcl_ret_t ret = rcl_publish(&battery_state_pub, &battery_state_msg, NULL);
