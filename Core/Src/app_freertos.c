@@ -69,16 +69,16 @@ extern ADC_HandleTypeDef hadc1;
 extern ADC_HandleTypeDef hadc2;
 /*global variables - temperature, battery state, battery SOC*/
 typedef struct battery{
-	int id;
-	float tension;
+	float voltage;
 	float adcConstant;
 } battery;
 typedef struct batteryCellSoc{
 	battery batteryCell[2];
 	float current;
 	float temperature;
-	float soc;
+	float percentage;
 } batterySoc;
+
 batterySoc soc;
 
 /* Publisher declaration */
@@ -90,7 +90,9 @@ rcl_timer_t timer;
 /* Messages declaration */
 sensor_msgs__msg__Temperature temperature_msg;
 sensor_msgs__msg__BatteryState battery_state_msg;
+
 /* USER CODE END Variables */
+
 /* Definitions for microROSTask */
 osThreadId_t microROSTaskHandle;
 const osThreadAttr_t microROSTask_attributes = {
@@ -124,7 +126,6 @@ osMutexId_t batteryCellSocMutexHandle;
 const osMutexAttr_t batteryCellSocMutex_attributes = {
   .name = "batteryCellSocMutex"
 };
-
 /* Private function prototypes -----------------------------------------------*/
 /* USER CODE BEGIN FunctionPrototypes */
 bool cubemx_transport_open(struct uxrCustomTransport * transport);
@@ -290,7 +291,7 @@ void microROSTaskFunction(void *argument)
 
 	  battery_state_msg.temperature = soc.temperature;
 
-	  battery_state_msg.voltage = soc.batteryCell[1].tension + soc.batteryCell[2].tension;
+	  battery_state_msg.voltage = soc.batteryCell[1].voltage + soc.batteryCell[2].voltage;
 	  battery_state_msg.current = soc.current;
 	  battery_state_msg.power_supply_health = sensor_msgs__msg__BatteryState__POWER_SUPPLY_STATUS_DISCHARGING;
 	  battery_state_msg.power_supply_technology = sensor_msgs__msg__BatteryState__POWER_SUPPLY_TECHNOLOGY_LION;
@@ -356,6 +357,9 @@ void BatteryStateFunction(void *argument)
   /* Infinite loop */
   uint16_t raw;
   float v1;
+  // battery constants
+  soc.batteryCell[1].adcConstant = (3.6*66/(56*4096));
+  soc.batteryCell[2].adcConstant = (3.6*(470+560)/(470*4096));
   for(;;)
   {
 	  // get adc value
@@ -367,7 +371,7 @@ void BatteryStateFunction(void *argument)
 	  //acquire mutex to write in the soc state
 	  if (osMutexAcquire(batteryCellSocMutexHandle, 10) == osOK)
 	  {
-		 soc.batteryCell[1].tension = v1;
+		 soc.batteryCell[1].voltage = v1;
 		 osMutexRelease(batteryCellSocMutexHandle);
 	  }
 
@@ -429,7 +433,7 @@ void timer_callback(rcl_timer_t * timer, int64_t last_call_time)
 		 if (osMutexAcquire(batteryCellSocMutexHandle, 10) == osOK)
 		 {
 			 battery_state_msg.temperature = soc.temperature;
-			 battery_state_msg.voltage = soc.batteryCell[1].tension;
+			 battery_state_msg.voltage = soc.batteryCell[1].voltage;
 			 osMutexRelease(batteryCellSocMutexHandle);
 		 }
 		 rcl_ret_t ret = rcl_publish(&battery_state_pub, &battery_state_msg, NULL);
