@@ -291,7 +291,7 @@ void microROSTaskFunction(void *argument)
 
 	  battery_state_msg.temperature = soc.temperature;
 
-	  battery_state_msg.voltage = soc.batteryCell[1].voltage + soc.batteryCell[2].voltage;
+	  battery_state_msg.voltage = 0;
 	  battery_state_msg.current = soc.current;
 	  battery_state_msg.power_supply_health = sensor_msgs__msg__BatteryState__POWER_SUPPLY_STATUS_DISCHARGING;
 	  battery_state_msg.power_supply_technology = sensor_msgs__msg__BatteryState__POWER_SUPPLY_TECHNOLOGY_LION;
@@ -356,26 +356,36 @@ void BatteryStateFunction(void *argument)
   /* USER CODE BEGIN BatteryStateFunction */
   /* Infinite loop */
   uint16_t raw;
-  float v1;
+  float v1, v2;
   // battery constants
-  soc.batteryCell[1].adcConstant = (3.6*66/(56*4096));
-  soc.batteryCell[2].adcConstant = (3.6*(470+560)/(470*4096));
+  soc.batteryCell[0].adcConstant = (4.2*(10+56)/(56*4096));
+  soc.batteryCell[1].adcConstant = (4.2*(470+560)/(470*4096));
   for(;;)
   {
 	  // get adc value
 	  HAL_ADC_Start(&hadc1);
 	  HAL_ADC_PollForConversion(&hadc1, HAL_MAX_DELAY);
 	  raw = HAL_ADC_GetValue(&hadc1);
+	  HAL_ADC_Stop(&hadc1);
 	  //convert to V
-	  v1 = (float)raw*(3.6*66/(56*4096));
+	  v1 = (float)raw*soc.batteryCell[0].adcConstant;
+	  // get adc value
+	  HAL_ADC_Start(&hadc2);
+	  HAL_ADC_PollForConversion(&hadc2, HAL_MAX_DELAY);
+	  raw = HAL_ADC_GetValue(&hadc2);
+	  //convert to V
+	  v2 = (float)raw*soc.batteryCell[1].adcConstant -v1;
+	  HAL_ADC_Stop(&hadc2);
+
 	  //acquire mutex to write in the soc state
 	  if (osMutexAcquire(batteryCellSocMutexHandle, 10) == osOK)
 	  {
-		 soc.batteryCell[1].voltage = v1;
+		 soc.batteryCell[0].voltage = v1;
+		 soc.batteryCell[1].voltage = v2;
 		 osMutexRelease(batteryCellSocMutexHandle);
 	  }
 
-	  osDelay(100);
+	  osDelay(1);
   }
   /* USER CODE END BatteryStateFunction */
 }
@@ -433,7 +443,7 @@ void timer_callback(rcl_timer_t * timer, int64_t last_call_time)
 		 if (osMutexAcquire(batteryCellSocMutexHandle, 10) == osOK)
 		 {
 			 battery_state_msg.temperature = soc.temperature;
-			 battery_state_msg.voltage = soc.batteryCell[1].voltage;
+			 battery_state_msg.voltage = soc.batteryCell[0].voltage + soc.batteryCell[1].voltage;
 			 osMutexRelease(batteryCellSocMutexHandle);
 		 }
 		 rcl_ret_t ret = rcl_publish(&battery_state_pub, &battery_state_msg, NULL);
