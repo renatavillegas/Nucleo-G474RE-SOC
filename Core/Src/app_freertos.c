@@ -40,7 +40,6 @@
 
 #include <sensor_msgs/msg/temperature.h>             // for the temperature msg
 #include <sensor_msgs/msg/battery_state.h>			 // for the battery state;
-
 /*sensor's libraries*/
 #include "LM75.h"
 
@@ -82,13 +81,11 @@ typedef struct batteryCellSoc{
 batterySoc soc;
 
 /* Publisher declaration */
-rcl_publisher_t temperature_state_pub;
 rcl_publisher_t battery_state_pub;
 /* ROS timer declaration */
 rcl_timer_t timer;
 
 /* Messages declaration */
-sensor_msgs__msg__Temperature temperature_msg;
 sensor_msgs__msg__BatteryState battery_state_msg;
 
 /* USER CODE END Variables */
@@ -263,21 +260,6 @@ void microROSTaskFunction(void *argument)
 	  if( rmw_uros_sync_session(1000) != RMW_RET_OK)
 		  printf("Error on time sync (line %d)\n", __LINE__);
 
-	  // create tempreature publisher
-	  rclc_publisher_init_default(
-		&temperature_state_pub,
-		&node,
-		ROSIDL_GET_MSG_TYPE_SUPPORT(sensor_msgs, msg, Temperature),
-		"/temperature_state");
-
-	  // tempreature_msg message allocation. Described in https://micro.ros.org/docs/tutorials/advanced/handling_type_memory/
-
-	  temperature_msg.header.frame_id.capacity = 20;
-	  temperature_msg.header.frame_id.data = (char*) pvPortMalloc(temperature_msg.header.frame_id.capacity  * sizeof(char));
-	  temperature_msg.header.frame_id.size = strlen(temperature_msg.header.frame_id.data);
-	  temperature_msg.temperature = -1;
-	  temperature_msg.variance = 0;
-
 	  // create battery_state publisher
 	  rclc_publisher_init_default(
 		&battery_state_pub,
@@ -421,23 +403,7 @@ void timer_callback(rcl_timer_t * timer, int64_t last_call_time)
 		int64_t time_ns;
 		time_ns = rmw_uros_epoch_nanos();
 		UTILS_NanosecondsToTimespec(time_ns, &ts);
-		//clock_gettime(CLOCK_REALTIME, &ts);
-
-		// Create the Header
-//		temperature_msg.header.stamp.sec = ts.tv_sec;
-//		temperature_msg.header.stamp.nanosec = ts.tv_nsec;
-//		if (osMutexAcquire(batteryCellSocMutexHandle, 10) == osOK)
-//		{
-//			temperature_msg.temperature = temperature;
-//			osMutexRelease(batteryCellSocMutexHandle);
-//		}
-//		rcl_ret_t ret = rcl_publish(&temperature_state_pub, &temperature_msg, NULL);
-//		if (ret != RCL_RET_OK)
-//		{
-//		  printf("Error publishing temperate (line %d)\n", __LINE__);
-//		}
-
-		  // Publish message
+		// Publish message
 		 battery_state_msg.header.stamp.sec = ts.tv_sec;
 		 battery_state_msg.header.stamp.nanosec = ts.tv_nsec;
 		 if (osMutexAcquire(batteryCellSocMutexHandle, 10) == osOK)
