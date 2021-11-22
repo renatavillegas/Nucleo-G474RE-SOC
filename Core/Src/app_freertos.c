@@ -53,6 +53,12 @@
 /* Private define ------------------------------------------------------------*/
 /* USER CODE BEGIN PD */
 
+/* Thread Flags*/
+
+#define READ_TEMPERATURE 	  0x0001
+#define BATTERY_DATA_READY  0x0002
+#define SOC_READY 			  0x0003
+
 /* USER CODE END PD */
 
 /* Private macro -------------------------------------------------------------*/
@@ -66,6 +72,7 @@
 extern UART_HandleTypeDef hlpuart1;
 extern ADC_HandleTypeDef hadc1;
 extern ADC_HandleTypeDef hadc2;
+
 /*global variables - temperature, battery state, battery SOC*/
 typedef struct battery{
 	float voltage;
@@ -79,6 +86,15 @@ typedef struct batteryCellSoc{
 } batterySoc;
 
 batterySoc soc;
+
+/*Micro-ros variables*/
+rcl_allocator_t freeRTOS_allocator;;
+rclc_support_t support;
+rcl_allocator_t allocator;
+rcl_node_t node;
+rclc_executor_t executor;
+rcl_init_options_t init_options;
+rcl_node_options_t node_ops;
 
 /* Publisher declaration */
 rcl_publisher_t battery_state_pub;
@@ -139,7 +155,8 @@ void timer_callback(rcl_timer_t * timer, int64_t last_call_time);
 void cmd_vel_callback(const void * msgin);
 
 double get_temperature(void);
-
+void microros_config(void);
+void microros_message_allocation(void);
 //extern int clock_gettime( int clock_id, struct timespec * tp );
 extern void UTILS_NanosecondsToTimespec( int64_t llSource, struct timespec * const pxDestination );
 
@@ -214,82 +231,27 @@ void MX_FREERTOS_Init(void) {
 void microROSTaskFunction(void *argument)
 {
   /* USER CODE BEGIN microROSTaskFunction */
-	  // micro-ROS configuration
-	  rmw_uros_set_custom_transport(
-		true,
-		(void *) &hlpuart1,
-		cubemx_transport_open,
-		cubemx_transport_close,
-		cubemx_transport_write,
-		cubemx_transport_read);
 
-	  rcl_allocator_t freeRTOS_allocator = rcutils_get_zero_initialized_allocator();
-	  freeRTOS_allocator.allocate = microros_allocate;
-	  freeRTOS_allocator.deallocate = microros_deallocate;
-	  freeRTOS_allocator.reallocate = microros_reallocate;
-	  freeRTOS_allocator.zero_allocate =  microros_zero_allocate;
-
-	  if (!rcutils_set_default_allocator(&freeRTOS_allocator)) {
-		  printf("Error on default allocators (line %d)\n", __LINE__);
-	  }
-
-	  rclc_support_t support;
-	  rcl_allocator_t allocator;
-	  rcl_node_t node;
-	  rclc_executor_t executor;
-	  rcl_init_options_t init_options;
-
-	  allocator = rcl_get_default_allocator();
-	  init_options = rcl_get_zero_initialized_init_options();
-	  rcl_ret_t ret = rcl_init_options_init(&init_options, allocator);
-	  if(ret != RCL_RET_OK)
-	  {
-		  printf("Error on init options (line %d)\n", __LINE__);
-	  }
-
-	  // create init_options
-	  rclc_support_init_with_options(&support, 0, NULL, &init_options, &allocator);
-
-	  // create node
-	  rcl_node_options_t node_ops = rcl_node_get_default_options();
-	  node_ops.domain_id = 25;
-	  rclc_node_init_with_options(&node, "acquisition_system", "", &support, &node_ops);
-
-
-	  //time sync
-	  if( rmw_uros_sync_session(1000) != RMW_RET_OK)
-		  printf("Error on time sync (line %d)\n", __LINE__);
-
-	  // create battery_state publisher
-	  rclc_publisher_init_default(
-		&battery_state_pub,
-		&node,
-		ROSIDL_GET_MSG_TYPE_SUPPORT(sensor_msgs, msg, BatteryState),
-		"/battery_state");
-	  // battery_state_msg allocation
-	  battery_state_msg.header.frame_id.capacity = 20;
-	  battery_state_msg.header.frame_id.data = (char*) pvPortMalloc(battery_state_msg.header.frame_id.capacity  * sizeof(char));
-	  battery_state_msg.header.frame_id.size = strlen(battery_state_msg.header.frame_id.data);
-
-	  battery_state_msg.temperature = soc.temperature;
-
-	  battery_state_msg.voltage = 0;
-	  battery_state_msg.current = soc.current;
-	  battery_state_msg.power_supply_health = sensor_msgs__msg__BatteryState__POWER_SUPPLY_STATUS_DISCHARGING;
-	  battery_state_msg.power_supply_technology = sensor_msgs__msg__BatteryState__POWER_SUPPLY_TECHNOLOGY_LION;
-
-	  // Create a timer
-	  rclc_timer_init_default(&timer, &support, RCL_MS_TO_NS(10), timer_callback);
-
-	  // Create executor
-	  rclc_executor_init(&executor, &support.context, 2, &allocator);
-	  rclc_executor_add_timer(&executor, &timer);
-
-	  // Run executor
-	  rclc_executor_spin(&executor);
-
-
-
+	if(osThreadFlagsWait(SOC_READY, osFlagsWaitAny, 200)!=osFlagsErrorTimeout)
+	{
+		// micro-ROS configuration
+		microros_config();
+		// create battery_state publisher
+		rclc_publisher_init_default(
+			&battery_state_pub,
+			&node,
+			ROSIDL_GET_MSG_TYPE_SUPPORT(sensor_msgs, msg, BatteryState),
+			"/battery_state");
+		// allocate memory to messages
+		microros_message_allocation();
+		// Create a timer
+		rclc_timer_init_default(&timer, &support, RCL_MS_TO_NS(10), timer_callback);
+		// Create executor
+		rclc_executor_init(&executor, &support.context, 2, &allocator);
+		rclc_executor_add_timer(&executor, &timer);
+		// Run executor
+		rclc_executor_spin(&executor);
+	}
   /* Infinite loop */
   for(;;)
   {
@@ -365,6 +327,7 @@ void BatteryStateFunction(void *argument)
 		 soc.batteryCell[0].voltage = v1;
 		 soc.batteryCell[1].voltage = v2;
 		 osMutexRelease(batteryCellSocMutexHandle);
+		 osThreadFlagsSet(SocTaskHandle, BATTERY_DATA_READY);
 	  }
 
 	  osDelay(1);
@@ -385,6 +348,10 @@ void SocTaskFunction(void *argument)
   /* Infinite loop */
   for(;;)
   {
+	  if(osThreadFlagsWait(BATTERY_DATA_READY, osFlagsWaitAny, 200)!=osFlagsErrorTimeout)
+	  {
+		  osThreadFlagsSet(microROSTaskHandle, SOC_READY);
+	  }
     osDelay(1);
   }
   /* USER CODE END SocTaskFunction */
@@ -413,15 +380,72 @@ void timer_callback(rcl_timer_t * timer, int64_t last_call_time)
 			 osMutexRelease(batteryCellSocMutexHandle);
 		 }
 		 rcl_ret_t ret = rcl_publish(&battery_state_pub, &battery_state_msg, NULL);
-		  if (ret != RCL_RET_OK)
-		  {
+		 if (ret != RCL_RET_OK)
+		 {
 			  printf("Error publishing battery state (line %d)\n", __LINE__);
-		  }
+		 }
 
 
 	}
 }
+void microros_config()
+{
+	  rmw_uros_set_custom_transport(
+		true,
+		(void *) &hlpuart1,
+		cubemx_transport_open,
+		cubemx_transport_close,
+		cubemx_transport_write,
+		cubemx_transport_read);
 
+	  freeRTOS_allocator = rcutils_get_zero_initialized_allocator();
+	  freeRTOS_allocator.allocate = microros_allocate;
+	  freeRTOS_allocator.deallocate = microros_deallocate;
+	  freeRTOS_allocator.reallocate = microros_reallocate;
+	  freeRTOS_allocator.zero_allocate =  microros_zero_allocate;
+
+	  if (!rcutils_set_default_allocator(&freeRTOS_allocator)) {
+		  printf("Error on default allocators (line %d)\n", __LINE__);
+	  }
+
+
+	  allocator = rcl_get_default_allocator();
+	  init_options = rcl_get_zero_initialized_init_options();
+	  rcl_ret_t ret = rcl_init_options_init(&init_options, allocator);
+	  if(ret != RCL_RET_OK)
+	  {
+		  printf("Error on init options (line %d)\n", __LINE__);
+	  }
+
+	  // create init_options
+	  rclc_support_init_with_options(&support, 0, NULL, &init_options, &allocator);
+
+	  // create node
+	  node_ops = rcl_node_get_default_options();
+	  node_ops.domain_id = 25;
+	  rclc_node_init_with_options(&node, "acquisition_system", "", &support, &node_ops);
+
+
+	  //time sync
+	  if( rmw_uros_sync_session(1000) != RMW_RET_OK)
+		  printf("Error on time sync (line %d)\n", __LINE__);
+
+}
+
+void microros_message_allocation()
+{
+	  // battery_state_msg allocation
+	  battery_state_msg.header.frame_id.capacity = 20;
+	  battery_state_msg.header.frame_id.data = (char*) pvPortMalloc(battery_state_msg.header.frame_id.capacity  * sizeof(char));
+	  battery_state_msg.header.frame_id.size = strlen(battery_state_msg.header.frame_id.data);
+
+	  battery_state_msg.temperature = soc.temperature;
+
+	  battery_state_msg.voltage = 0;
+	  battery_state_msg.current = soc.current;
+	  battery_state_msg.power_supply_health = sensor_msgs__msg__BatteryState__POWER_SUPPLY_STATUS_DISCHARGING;
+	  battery_state_msg.power_supply_technology = sensor_msgs__msg__BatteryState__POWER_SUPPLY_TECHNOLOGY_LION;
+}
 /* USER CODE END Application */
 
 /************************ (C) COPYRIGHT STMicroelectronics *****END OF FILE****/
