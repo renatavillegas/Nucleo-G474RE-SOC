@@ -53,6 +53,7 @@
 /* Private define ------------------------------------------------------------*/
 /* USER CODE BEGIN PD */
 
+#define TEMP_MAX 25
 /* Thread Flags*/
 
 #define READ_TEMPERATURE 	  0x0001
@@ -284,6 +285,12 @@ void temperatureControlTask(void *argument)
 			  soc.temperature = get_temperature();
 			  osMutexRelease(batteryCellSocMutexHandle);
 		  }
+		  if(soc.temperature >= TEMP_MAX)
+		  {
+			  HAL_GPIO_WritePin(COOLER_GPIO_Port, COOLER_Pin, GPIO_PIN_SET);
+		  }
+		  else
+			  HAL_GPIO_WritePin(COOLER_GPIO_Port, COOLER_Pin, GPIO_PIN_RESET);
 	  }
     osDelay(1);
   }
@@ -304,8 +311,8 @@ void BatteryStateFunction(void *argument)
   uint16_t raw;
   float v1, v2, i;
   // battery constants
-  soc.batteryCell[0].adcConstant = (4.2*(10+56)/(56*4096));
-  soc.batteryCell[1].adcConstant = (4.2*(470+560)/(470*4096));
+  soc.batteryCell[0].adcConstant = (3.6*(10+56)/(56*4096));
+  soc.batteryCell[1].adcConstant = (3.6*(470+560)/(470*4096));
   for(;;)
   {
 	  // get adc value
@@ -322,11 +329,12 @@ void BatteryStateFunction(void *argument)
 	  //convert to V
 	  v2 = (float)raw*soc.batteryCell[1].adcConstant -v1;
 	  HAL_ADC_Stop(&hadc2);
+	  // get current
 	  if(INA219_Init(&ina219, &hi2c4, INA219_ADDRESS))
 	  {
 		  i = INA219_ReadCurrent(&ina219);
 	  }
-	  //acquire mutex to write in the soc state
+	  //acquire mutex to write in the soc and set BATTERY_DATA_READY
 	  if (osMutexAcquire(batteryCellSocMutexHandle, 10) == osOK)
 	  {
 		 soc.batteryCell[0].voltage = v1;
@@ -335,7 +343,6 @@ void BatteryStateFunction(void *argument)
 		 osMutexRelease(batteryCellSocMutexHandle);
 		 osThreadFlagsSet(SocTaskHandle, BATTERY_DATA_READY);
 	  }
-
 	  osDelay(1);
   }
   /* USER CODE END BatteryStateFunction */
