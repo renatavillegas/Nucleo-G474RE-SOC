@@ -42,7 +42,7 @@
 #include <sensor_msgs/msg/battery_state.h>			 // for the battery state;
 /*sensor's libraries*/
 #include "LM75.h"
-
+#include "INA219.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -72,7 +72,9 @@
 extern UART_HandleTypeDef hlpuart1;
 extern ADC_HandleTypeDef hadc1;
 extern ADC_HandleTypeDef hadc2;
+extern I2C_HandleTypeDef hi2c4;
 
+INA219_t ina219;
 /*global variables - temperature, battery state, battery SOC*/
 typedef struct battery{
 	float voltage;
@@ -105,7 +107,6 @@ rcl_timer_t timer;
 sensor_msgs__msg__BatteryState battery_state_msg;
 
 /* USER CODE END Variables */
-
 /* Definitions for microROSTask */
 osThreadId_t microROSTaskHandle;
 const osThreadAttr_t microROSTask_attributes = {
@@ -139,6 +140,7 @@ osMutexId_t batteryCellSocMutexHandle;
 const osMutexAttr_t batteryCellSocMutex_attributes = {
   .name = "batteryCellSocMutex"
 };
+
 /* Private function prototypes -----------------------------------------------*/
 /* USER CODE BEGIN FunctionPrototypes */
 bool cubemx_transport_open(struct uxrCustomTransport * transport);
@@ -300,7 +302,7 @@ void BatteryStateFunction(void *argument)
   /* USER CODE BEGIN BatteryStateFunction */
   /* Infinite loop */
   uint16_t raw;
-  float v1, v2;
+  float v1, v2, i;
   // battery constants
   soc.batteryCell[0].adcConstant = (4.2*(10+56)/(56*4096));
   soc.batteryCell[1].adcConstant = (4.2*(470+560)/(470*4096));
@@ -320,12 +322,16 @@ void BatteryStateFunction(void *argument)
 	  //convert to V
 	  v2 = (float)raw*soc.batteryCell[1].adcConstant -v1;
 	  HAL_ADC_Stop(&hadc2);
-
+	  if(INA219_Init(&ina219, &hi2c4, INA219_ADDRESS))
+	  {
+		  i = INA219_ReadCurrent(&ina219);
+	  }
 	  //acquire mutex to write in the soc state
 	  if (osMutexAcquire(batteryCellSocMutexHandle, 10) == osOK)
 	  {
 		 soc.batteryCell[0].voltage = v1;
 		 soc.batteryCell[1].voltage = v2;
+		 soc.current = i;
 		 osMutexRelease(batteryCellSocMutexHandle);
 		 osThreadFlagsSet(SocTaskHandle, BATTERY_DATA_READY);
 	  }
