@@ -75,7 +75,8 @@ extern ADC_HandleTypeDef hadc1;
 extern ADC_HandleTypeDef hadc2;
 extern I2C_HandleTypeDef hi2c4;
 
-INA219_t ina219;
+uint8_t address=0;
+
 /*global variables - temperature, battery state, battery SOC*/
 typedef struct battery{
 	float voltage;
@@ -113,7 +114,7 @@ osThreadId_t microROSTaskHandle;
 const osThreadAttr_t microROSTask_attributes = {
   .name = "microROSTask",
   .priority = (osPriority_t) osPriorityNormal,
-  .stack_size = 3000 * 4
+  .stack_size = 3100 * 4
 };
 /* Definitions for tempControlTask */
 osThreadId_t tempControlTaskHandle;
@@ -127,7 +128,7 @@ osThreadId_t BatteryStateHandle;
 const osThreadAttr_t BatteryState_attributes = {
   .name = "BatteryState",
   .priority = (osPriority_t) osPriorityNormal,
-  .stack_size = 128 * 4
+  .stack_size = 300 * 4
 };
 /* Definitions for SocTask */
 osThreadId_t SocTaskHandle;
@@ -248,7 +249,7 @@ void microROSTaskFunction(void *argument)
 		// allocate memory to messages
 		microros_message_allocation();
 		// Create a timer
-		rclc_timer_init_default(&timer, &support, RCL_MS_TO_NS(10), timer_callback);
+		rclc_timer_init_default(&timer, &support, RCL_MS_TO_NS(1000), timer_callback);
 		// Create executor
 		rclc_executor_init(&executor, &support.context, 2, &allocator);
 		rclc_executor_add_timer(&executor, &timer);
@@ -281,7 +282,7 @@ void temperatureControlTask(void *argument)
 		  // get temperature
 		  if (osMutexAcquire(batteryCellSocMutexHandle, 100) == osOK)
 		  {
-			  HAL_GPIO_TogglePin(LD2_GPIO_Port, LD2_Pin);
+			  //HAL_GPIO_TogglePin(LD2_GPIO_Port, LD2_Pin);
 			  soc.temperature = get_temperature();
 			  osMutexRelease(batteryCellSocMutexHandle);
 		  }
@@ -309,7 +310,8 @@ void BatteryStateFunction(void *argument)
   /* USER CODE BEGIN BatteryStateFunction */
   /* Infinite loop */
   uint16_t raw;
-  float v1, v2, i;
+  float v1, v2;
+  float i;
   // battery constants
   soc.batteryCell[0].adcConstant = (3.6*(10+56)/(56*4096));
   soc.batteryCell[1].adcConstant = (3.6*(470+560)/(470*4096));
@@ -327,13 +329,10 @@ void BatteryStateFunction(void *argument)
 	  HAL_ADC_PollForConversion(&hadc2, HAL_MAX_DELAY);
 	  raw = HAL_ADC_GetValue(&hadc2);
 	  //convert to V
-	  v2 = (float)raw*soc.batteryCell[1].adcConstant -v1;
+	  v2 = (float)raw*soc.batteryCell[1].adcConstant;
 	  HAL_ADC_Stop(&hadc2);
 	  // get current
-	  if(INA219_Init(&ina219, &hi2c4, INA219_ADDRESS))
-	  {
-		  i = INA219_ReadCurrent(&ina219);
-	  }
+	  i = INA219_getCurrent_mA(hi2c4, INA219_ADDRESS);
 	  //acquire mutex to write in the soc and set BATTERY_DATA_READY
 	  if (osMutexAcquire(batteryCellSocMutexHandle, 10) == osOK)
 	  {
@@ -389,7 +388,8 @@ void timer_callback(rcl_timer_t * timer, int64_t last_call_time)
 		 if (osMutexAcquire(batteryCellSocMutexHandle, 10) == osOK)
 		 {
 			 battery_state_msg.temperature = soc.temperature;
-			 battery_state_msg.voltage = soc.batteryCell[0].voltage + soc.batteryCell[1].voltage;
+			 battery_state_msg.voltage = soc.batteryCell[1].voltage;
+			 battery_state_msg.current = soc.current;
 			 osMutexRelease(batteryCellSocMutexHandle);
 		 }
 		 rcl_ret_t ret = rcl_publish(&battery_state_pub, &battery_state_msg, NULL);

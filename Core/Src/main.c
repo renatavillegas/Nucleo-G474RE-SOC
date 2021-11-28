@@ -29,7 +29,7 @@
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
-
+#include "INA219.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -50,6 +50,8 @@
 
 /* USER CODE BEGIN PV */
 extern osThreadId_t tempControlTaskHandle;
+//INA219_t ina219;
+uint16_t i =-1;
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -71,7 +73,6 @@ void MX_FREERTOS_Init(void);
 int main(void)
 {
   /* USER CODE BEGIN 1 */
-
   /* USER CODE END 1 */
 
   /* MCU Configuration--------------------------------------------------------*/
@@ -101,6 +102,9 @@ int main(void)
   MX_I2C4_Init();
   /* USER CODE BEGIN 2 */
   HAL_TIM_Base_Start_IT(&htim7);
+  //HAL_GPIO_TogglePin(LD2_GPIO_Port, LD2_Pin);
+  INA219_init(hi2c4, INA219_ADDRESS);
+
   /* USER CODE END 2 */
 
   /* Init scheduler */
