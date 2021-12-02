@@ -349,7 +349,7 @@ void INA219_setCalibration_32V_1A(I2C_HandleTypeDef hi2c, int16_t DevAddress) {
                     INA219_CONFIG_GAIN_8_320MV | INA219_CONFIG_BADCRES_12BIT |
                     INA219_CONFIG_SADCRES_12BIT_1S_532US |
                     INA219_CONFIG_MODE_SANDBVOLT_CONTINUOUS;
-  HAL_I2C_Mem_Write(&hi2c, DevAddress, INA219_REG_CONFIG, 1, (uint8_t *)config, 2, 1);
+  HAL_I2C_Mem_Write(&hi2c, DevAddress, INA219_REG_CONFIG, 1, config, 2, 1);
 }
 
 /*!

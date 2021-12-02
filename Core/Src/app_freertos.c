@@ -289,6 +289,7 @@ void temperatureControlTask(void *argument)
 		  if(soc.temperature >= TEMP_MAX)
 		  {
 			  HAL_GPIO_WritePin(COOLER_GPIO_Port, COOLER_Pin, GPIO_PIN_SET);
+			  HAL_GPIO_TogglePin(LD2_GPIO_Port, LD2_Pin);
 		  }
 		  else
 			  HAL_GPIO_WritePin(COOLER_GPIO_Port, COOLER_Pin, GPIO_PIN_RESET);
@@ -313,7 +314,7 @@ void BatteryStateFunction(void *argument)
   float v1, v2;
   float i;
   // battery constants
-  soc.batteryCell[0].adcConstant = (3.6*(10+56)/(56*4096));
+  soc.batteryCell[0].adcConstant = (3.6*(10+56)/(10*4096));
   soc.batteryCell[1].adcConstant = (3.6*(470+560)/(470*4096));
   for(;;)
   {
@@ -329,10 +330,10 @@ void BatteryStateFunction(void *argument)
 	  HAL_ADC_PollForConversion(&hadc2, HAL_MAX_DELAY);
 	  raw = HAL_ADC_GetValue(&hadc2);
 	  //convert to V
-	  v2 = (float)raw*soc.batteryCell[1].adcConstant;
+	  v2 = (float)raw*soc.batteryCell[1].adcConstant -v1;
 	  HAL_ADC_Stop(&hadc2);
 	  // get current
-	  i = INA219_getCurrent_mA(hi2c4, INA219_ADDRESS);
+	  //i = INA219_getCurrent_mA(hi2c4, INA219_ADDRESS);
 	  //acquire mutex to write in the soc and set BATTERY_DATA_READY
 	  if (osMutexAcquire(batteryCellSocMutexHandle, 10) == osOK)
 	  {
@@ -388,7 +389,7 @@ void timer_callback(rcl_timer_t * timer, int64_t last_call_time)
 		 if (osMutexAcquire(batteryCellSocMutexHandle, 10) == osOK)
 		 {
 			 battery_state_msg.temperature = soc.temperature;
-			 battery_state_msg.voltage = soc.batteryCell[1].voltage;
+			 battery_state_msg.voltage = soc.batteryCell[1].voltage + soc.batteryCell[0].voltage;
 			 battery_state_msg.current = soc.current;
 			 osMutexRelease(batteryCellSocMutexHandle);
 		 }
