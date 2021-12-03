@@ -53,7 +53,7 @@
 /* Private define ------------------------------------------------------------*/
 /* USER CODE BEGIN PD */
 
-#define TEMP_MAX 25
+#define TEMP_MAX 26.5
 /* Thread Flags*/
 
 #define READ_TEMPERATURE 	  0x0001
@@ -289,7 +289,7 @@ void temperatureControlTask(void *argument)
 		  if(soc.temperature >= TEMP_MAX)
 		  {
 			  HAL_GPIO_WritePin(COOLER_GPIO_Port, COOLER_Pin, GPIO_PIN_SET);
-			  HAL_GPIO_TogglePin(LD2_GPIO_Port, LD2_Pin);
+			  //HAL_GPIO_TogglePin(LD2_GPIO_Port, LD2_Pin);
 		  }
 		  else
 			  HAL_GPIO_WritePin(COOLER_GPIO_Port, COOLER_Pin, GPIO_PIN_RESET);
@@ -336,7 +336,6 @@ void BatteryStateFunction(void *argument)
 	  v2 = (float)raw*soc.batteryCell[1].adcConstant -v1;
 	  HAL_ADC_Stop(&hadc2);
 	  // get current
-
   	  ui8Buff[0]= 0x01;
       halStatus = HAL_I2C_Master_Transmit(&hi2c4, (0x40 << 1), ui8Buff, 1, 150);
       if(halStatus == HAL_OK)
@@ -345,7 +344,7 @@ void BatteryStateFunction(void *argument)
          if(halStatus == HAL_OK)
          {
            HAL_GPIO_TogglePin(LD2_GPIO_Port, LD2_Pin);
-           i= (float)(ui8Buff[0]<<8 | ui8Buff[1]) * 0.1; // pois o resistor Shunt é de 100ohm, ou 0,1 kOhm (saida em miliVolt)
+           i= (float)(ui8Buff[0]<<8 | ui8Buff[1])/10; // pois o resistor Shunt é de 100ohm, ou 0,1 kOhm (saida em miliVolt)
            if (i < 0)
                i = i * (-1);
            }
