@@ -312,7 +312,10 @@ void BatteryStateFunction(void *argument)
   /* Infinite loop */
   uint16_t raw;
   float v1, v2;
-  float i;
+  float i= -1;
+  uint8_t ui8Buff[2];
+  HAL_StatusTypeDef halStatus;
+
   // battery constants
   soc.batteryCell[0].adcConstant = (3.6*(10+56)/(10*4096));
   soc.batteryCell[1].adcConstant = (3.6*(470+560)/(470*4096));
@@ -333,7 +336,22 @@ void BatteryStateFunction(void *argument)
 	  v2 = (float)raw*soc.batteryCell[1].adcConstant -v1;
 	  HAL_ADC_Stop(&hadc2);
 	  // get current
-	  //i = INA219_getCurrent_mA(hi2c4, INA219_ADDRESS);
+
+  	  ui8Buff[0]= 0x01;
+      halStatus = HAL_I2C_Master_Transmit(&hi2c4, (0x40 << 1), ui8Buff, 1, 150);
+      if(halStatus == HAL_OK)
+      {
+         halStatus = HAL_I2C_Master_Receive(&hi2c4, (0x40 << 1), ui8Buff, 2, 150);
+         if(halStatus == HAL_OK)
+         {
+           HAL_GPIO_TogglePin(LD2_GPIO_Port, LD2_Pin);
+           i= (float)(ui8Buff[0]<<8 | ui8Buff[1]) * 0.1; // pois o resistor Shunt é de 100ohm, ou 0,1 kOhm (saida em miliVolt)
+           if (i < 0)
+               i = i * (-1);
+           }
+      }
+
+
 	  //acquire mutex to write in the soc and set BATTERY_DATA_READY
 	  if (osMutexAcquire(batteryCellSocMutexHandle, 10) == osOK)
 	  {
