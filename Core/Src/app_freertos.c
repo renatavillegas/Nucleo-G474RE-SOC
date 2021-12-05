@@ -53,7 +53,7 @@
 /* Private define ------------------------------------------------------------*/
 /* USER CODE BEGIN PD */
 
-#define TEMP_MAX 26.5
+#define TEMP_MAX 27.5
 /* Thread Flags*/
 
 #define READ_TEMPERATURE 	  0x0001
@@ -87,9 +87,12 @@ typedef struct batteryCellSoc{
 	float current;
 	float temperature;
 	float percentage;
+	float capacity;
 } batterySoc;
 
 batterySoc soc;
+uint32_t now;
+uint32_t previous_time;
 
 /*Micro-ros variables*/
 rcl_allocator_t freeRTOS_allocator;;
@@ -249,7 +252,7 @@ void microROSTaskFunction(void *argument)
 		// allocate memory to messages
 		microros_message_allocation();
 		// Create a timer
-		rclc_timer_init_default(&timer, &support, RCL_MS_TO_NS(1000), timer_callback);
+		rclc_timer_init_default(&timer, &support, RCL_MS_TO_NS(100), timer_callback);
 		// Create executor
 		rclc_executor_init(&executor, &support.context, 2, &allocator);
 		rclc_executor_add_timer(&executor, &timer);
@@ -277,7 +280,7 @@ void temperatureControlTask(void *argument)
   /* Infinite loop */
   for(;;)
   {
-	  if(osThreadFlagsWait(READ_TEMPERATURE, osFlagsWaitAny, 3000)!=osFlagsErrorTimeout)
+	  if(osThreadFlagsWait(READ_TEMPERATURE, osFlagsWaitAny, 100)!=osFlagsErrorTimeout)
 	  {
 		  // get temperature
 		  if (osMutexAcquire(batteryCellSocMutexHandle, 100) == osOK)
@@ -312,7 +315,7 @@ void BatteryStateFunction(void *argument)
   /* Infinite loop */
   uint16_t raw;
   float v1, v2;
-  float i= -1;
+  float i= 0;
   uint8_t ui8Buff[2];
   HAL_StatusTypeDef halStatus;
 
@@ -337,10 +340,10 @@ void BatteryStateFunction(void *argument)
 	  HAL_ADC_Stop(&hadc2);
 	  // get current
   	  ui8Buff[0]= 0x01;
-      halStatus = HAL_I2C_Master_Transmit(&hi2c4, (0x40 << 1), ui8Buff, 1, 150);
+      halStatus = HAL_I2C_Master_Transmit(&hi2c4, (0x40 << 1), ui8Buff, 1, 100);
       if(halStatus == HAL_OK)
       {
-         halStatus = HAL_I2C_Master_Receive(&hi2c4, (0x40 << 1), ui8Buff, 2, 150);
+         halStatus = HAL_I2C_Master_Receive(&hi2c4, (0x40 << 1), ui8Buff, 2, 100);
          if(halStatus == HAL_OK)
          {
            HAL_GPIO_TogglePin(LD2_GPIO_Port, LD2_Pin);
@@ -376,10 +379,21 @@ void SocTaskFunction(void *argument)
 {
   /* USER CODE BEGIN SocTaskFunction */
   /* Infinite loop */
+  soc.capacity = 2.2; //Ah
+  soc.percentage = 1;
   for(;;)
   {
 	  if(osThreadFlagsWait(BATTERY_DATA_READY, osFlagsWaitAny, 200)!=osFlagsErrorTimeout)
 	  {
+		  // coulomb counting
+		  now = HAL_GetTick();
+		  if (osMutexAcquire(batteryCellSocMutexHandle, 10) == osOK)
+		  {
+			 float dsoc = soc.current*(now-previous_time)/(1000*3600); // time in msec
+			 soc.percentage = soc.percentage -(1/soc.capacity)*dsoc;
+			 osMutexRelease(batteryCellSocMutexHandle);
+		  }
+		  previous_time = now;
 		  osThreadFlagsSet(microROSTaskHandle, SOC_READY);
 	  }
     osDelay(1);
@@ -471,9 +485,12 @@ void microros_message_allocation()
 	  battery_state_msg.header.frame_id.size = strlen(battery_state_msg.header.frame_id.data);
 
 	  battery_state_msg.temperature = soc.temperature;
+	  battery_state_msg.capacity =2.2;
+	  battery_state_msg.present = true;
 
 	  battery_state_msg.voltage = 0;
 	  battery_state_msg.current = soc.current;
+	  battery_state_msg.percentage = soc.percentage;
 	  battery_state_msg.power_supply_health = sensor_msgs__msg__BatteryState__POWER_SUPPLY_STATUS_DISCHARGING;
 	  battery_state_msg.power_supply_technology = sensor_msgs__msg__BatteryState__POWER_SUPPLY_TECHNOLOGY_LION;
 }
