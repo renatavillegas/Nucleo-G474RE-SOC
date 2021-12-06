@@ -417,6 +417,7 @@ void timer_callback(rcl_timer_t * timer, int64_t last_call_time)
 		// Publish message
 		 battery_state_msg.header.stamp.sec = ts.tv_sec;
 		 battery_state_msg.header.stamp.nanosec = ts.tv_nsec;
+		 battery_state_msg.capacity = 2.2;
 		 if (osMutexAcquire(batteryCellSocMutexHandle, 10) == osOK)
 		 {
 			 battery_state_msg.temperature = soc.temperature;
@@ -485,7 +486,7 @@ void microros_message_allocation()
 	  battery_state_msg.header.frame_id.size = strlen(battery_state_msg.header.frame_id.data);
 
 	  battery_state_msg.temperature = soc.temperature;
-	  battery_state_msg.capacity =2.2;
+	  battery_state_msg.capacity =2.20;
 	  battery_state_msg.present = true;
 
 	  battery_state_msg.voltage = 0;
