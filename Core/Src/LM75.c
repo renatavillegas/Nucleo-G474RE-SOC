@@ -1,8 +1,10 @@
 /*
  * LM75.c
- *
+ *	File Description: This file implements the function to
+ *	get the temperature.
  *  Created on: Nov 6, 2021
  *      Author: renata
+ *  Revision Date: Nov 6, 2021
  */
 
 /* Includes ------------------------------------------------------------------*/
@@ -25,7 +27,7 @@ extern I2C_HandleTypeDef hi2c1;
   * @brief This function reads the temperature.
 */
 
-double get_temperature()
+double getTemperature()
 {
 	  //tell LM75 that we want to read from the temperature register
 	  buf[0]= REG_TEMP;

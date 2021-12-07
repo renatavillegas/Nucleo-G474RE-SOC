@@ -38,7 +38,7 @@
 #include <time.h>
 
 
-#include <sensor_msgs/msg/temperature.h>             // for the temperature msg
+#include <sensor_msgs/msg/temperature.h>             // for the ftemperature msg
 #include <sensor_msgs/msg/battery_state.h>			 // for the battery state;
 /*sensor's libraries*/
 #include "LM75.h"
@@ -56,7 +56,7 @@
 #define TEMP_MAX 27.5
 /* Thread Flags*/
 
-#define READ_TEMPERATURE 	  0x0001
+#define READ_ftemperature 	  0x0001
 #define BATTERY_DATA_READY  0x0002
 #define SOC_READY 			  0x0003
 
@@ -77,17 +77,17 @@ extern I2C_HandleTypeDef hi2c4;
 
 uint8_t address=0;
 
-/*global variables - temperature, battery state, battery SOC*/
+/*global variables - ftemperature, battery state, battery SOC*/
 typedef struct battery{
-	float voltage;
-	float adcConstant;
+	float fvoltage;
+	float fadcConstant;
 } battery;
 typedef struct batteryCellSoc{
 	battery batteryCell[2];
-	float current;
-	float temperature;
-	float percentage;
-	float capacity;
+	float fcurrent;
+	float ftemperature;
+	float fpercentage;
+	float fcapacity;
 } batterySoc;
 
 batterySoc soc;
@@ -161,16 +161,16 @@ void * microros_zero_allocate(size_t number_of_elements, size_t size_of_element,
 void timer_callback(rcl_timer_t * timer, int64_t last_call_time);
 void cmd_vel_callback(const void * msgin);
 
-double get_temperature(void);
-void microros_config(void);
-void microros_message_allocation(void);
+double getftemperature(void);
+void microrosConfig(void);
+void microrosMessageAllocation(void);
 //extern int clock_gettime( int clock_id, struct timespec * tp );
 extern void UTILS_NanosecondsToTimespec( int64_t llSource, struct timespec * const pxDestination );
 
 /* USER CODE END FunctionPrototypes */
 
 void microROSTaskFunction(void *argument);
-void temperatureControlTask(void *argument);
+void ftemperatureControlTask(void *argument);
 void BatteryStateFunction(void *argument);
 void SocTaskFunction(void *argument);
 
@@ -210,7 +210,7 @@ void MX_FREERTOS_Init(void) {
   microROSTaskHandle = osThreadNew(microROSTaskFunction, NULL, &microROSTask_attributes);
 
   /* creation of tempControlTask */
-  tempControlTaskHandle = osThreadNew(temperatureControlTask, NULL, &tempControlTask_attributes);
+  tempControlTaskHandle = osThreadNew(ftemperatureControlTask, NULL, &tempControlTask_attributes);
 
   /* creation of BatteryState */
   BatteryStateHandle = osThreadNew(BatteryStateFunction, NULL, &BatteryState_attributes);
@@ -242,7 +242,7 @@ void microROSTaskFunction(void *argument)
 	if(osThreadFlagsWait(SOC_READY, osFlagsWaitAny, 200)!=osFlagsErrorTimeout)
 	{
 		// micro-ROS configuration
-		microros_config();
+		microrosConfig();
 		// create battery_state publisher
 		rclc_publisher_init_default(
 			&battery_state_pub,
@@ -250,7 +250,7 @@ void microROSTaskFunction(void *argument)
 			ROSIDL_GET_MSG_TYPE_SUPPORT(sensor_msgs, msg, BatteryState),
 			"/battery_state");
 		// allocate memory to messages
-		microros_message_allocation();
+		microrosMessageAllocation();
 		// Create a timer
 		rclc_timer_init_default(&timer, &support, RCL_MS_TO_NS(100), timer_callback);
 		// Create executor
@@ -267,39 +267,37 @@ void microROSTaskFunction(void *argument)
   /* USER CODE END microROSTaskFunction */
 }
 
-/* USER CODE BEGIN Header_temperatureControlTask */
+/* USER CODE BEGIN Header_ftemperatureControlTask */
 /**
 * @brief Function implementing the tempControlTask thread.
 * @param argument: Not used
 * @retval None
 */
-/* USER CODE END Header_temperatureControlTask */
-void temperatureControlTask(void *argument)
+/* USER CODE END Header_ftemperatureControlTask */
+void ftemperatureControlTask(void *argument)
 {
-  /* USER CODE BEGIN temperatureControlTask */
+  /* USER CODE BEGIN ftemperatureControlTask */
   /* Infinite loop */
   for(;;)
   {
-	  if(osThreadFlagsWait(READ_TEMPERATURE, osFlagsWaitAny, 100)!=osFlagsErrorTimeout)
+	  if(osThreadFlagsWait(READ_ftemperature, osFlagsWaitAny, 100)!=osFlagsErrorTimeout)
 	  {
-		  // get temperature
+		  // get ftemperature
 		  if (osMutexAcquire(batteryCellSocMutexHandle, 100) == osOK)
 		  {
-			  //HAL_GPIO_TogglePin(LD2_GPIO_Port, LD2_Pin);
-			  soc.temperature = get_temperature();
+			  soc.ftemperature = getTemperature();
 			  osMutexRelease(batteryCellSocMutexHandle);
 		  }
-		  if(soc.temperature >= TEMP_MAX)
+		  if(soc.ftemperature >= TEMP_MAX)
 		  {
 			  HAL_GPIO_WritePin(COOLER_GPIO_Port, COOLER_Pin, GPIO_PIN_SET);
-			  //HAL_GPIO_TogglePin(LD2_GPIO_Port, LD2_Pin);
 		  }
 		  else
 			  HAL_GPIO_WritePin(COOLER_GPIO_Port, COOLER_Pin, GPIO_PIN_RESET);
 	  }
     osDelay(1);
   }
-  /* USER CODE END temperatureControlTask */
+  /* USER CODE END ftemperatureControlTask */
 }
 
 /* USER CODE BEGIN Header_BatteryStateFunction */
@@ -314,14 +312,14 @@ void BatteryStateFunction(void *argument)
   /* USER CODE BEGIN BatteryStateFunction */
   /* Infinite loop */
   uint16_t raw;
-  float v1, v2;
+  float fv1, fv2;
   float i= 0;
   uint8_t ui8Buff[2];
   HAL_StatusTypeDef halStatus;
 
   // battery constants
-  soc.batteryCell[0].adcConstant = (3.6*(10+56)/(10*4096));
-  soc.batteryCell[1].adcConstant = (3.6*(470+560)/(470*4096));
+  soc.batteryCell[0].fadcConstant = (3.6*(10+56)/(10*4096));
+  soc.batteryCell[1].fadcConstant = (3.6*(470+560)/(470*4096));
   for(;;)
   {
 	  // get adc value
@@ -330,15 +328,15 @@ void BatteryStateFunction(void *argument)
 	  raw = HAL_ADC_GetValue(&hadc1);
 	  HAL_ADC_Stop(&hadc1);
 	  //convert to V
-	  v1 = (float)raw*soc.batteryCell[0].adcConstant;
+	  fv1 = (float)raw*soc.batteryCell[0].fadcConstant;
 	  // get adc value
 	  HAL_ADC_Start(&hadc2);
 	  HAL_ADC_PollForConversion(&hadc2, HAL_MAX_DELAY);
 	  raw = HAL_ADC_GetValue(&hadc2);
 	  //convert to V
-	  v2 = (float)raw*soc.batteryCell[1].adcConstant -v1;
+	  fv2 = (float)raw*soc.batteryCell[1].fadcConstant -fv1;
 	  HAL_ADC_Stop(&hadc2);
-	  // get current
+	  // get fcurrent
   	  ui8Buff[0]= 0x01;
       halStatus = HAL_I2C_Master_Transmit(&hi2c4, (0x40 << 1), ui8Buff, 1, 100);
       if(halStatus == HAL_OK)
@@ -346,6 +344,7 @@ void BatteryStateFunction(void *argument)
          halStatus = HAL_I2C_Master_Receive(&hi2c4, (0x40 << 1), ui8Buff, 2, 100);
          if(halStatus == HAL_OK)
          {
+        	// Blink led to debug
            HAL_GPIO_TogglePin(LD2_GPIO_Port, LD2_Pin);
            i= (float)(ui8Buff[0]<<8 | ui8Buff[1])/10; // pois o resistor Shunt é de 100ohm, ou 0,1 kOhm (saida em miliVolt)
            if (i < 0)
@@ -357,9 +356,9 @@ void BatteryStateFunction(void *argument)
 	  //acquire mutex to write in the soc and set BATTERY_DATA_READY
 	  if (osMutexAcquire(batteryCellSocMutexHandle, 10) == osOK)
 	  {
-		 soc.batteryCell[0].voltage = v1;
-		 soc.batteryCell[1].voltage = v2;
-		 soc.current = i;
+		 soc.batteryCell[0].fvoltage = fv1;
+		 soc.batteryCell[1].fvoltage = fv2;
+		 soc.fcurrent = i;
 		 osMutexRelease(batteryCellSocMutexHandle);
 		 osThreadFlagsSet(SocTaskHandle, BATTERY_DATA_READY);
 	  }
@@ -379,8 +378,8 @@ void SocTaskFunction(void *argument)
 {
   /* USER CODE BEGIN SocTaskFunction */
   /* Infinite loop */
-  soc.capacity = 2.2; //Ah
-  soc.percentage = 1;
+  soc.fcapacity = 2.2; //Ah
+  soc.fpercentage = 1;
   for(;;)
   {
 	  if(osThreadFlagsWait(BATTERY_DATA_READY, osFlagsWaitAny, 200)!=osFlagsErrorTimeout)
@@ -389,8 +388,8 @@ void SocTaskFunction(void *argument)
 		  now = HAL_GetTick();
 		  if (osMutexAcquire(batteryCellSocMutexHandle, 10) == osOK)
 		  {
-			 float dsoc = soc.current*(now-previous_time)/(1000*3600); // time in msec
-			 soc.percentage = soc.percentage -(1/soc.capacity)*dsoc;
+			 float dsoc = soc.fcurrent*(now-previous_time)/(1000*3600); // time in msec
+			 soc.fpercentage = soc.fpercentage -(1/soc.fcapacity)*dsoc;
 			 osMutexRelease(batteryCellSocMutexHandle);
 		  }
 		  previous_time = now;
@@ -403,12 +402,15 @@ void SocTaskFunction(void *argument)
 
 /* Private application code --------------------------------------------------*/
 /* USER CODE BEGIN Application */
+/* ***************************************************** */
+/* Method name: timer_callback */
+/* Method description: Executes the callback function to the microros task */
+/* Input params: timer and the last call time */
+/* Output params: NA*/
+/* ***************************************************** */
 void timer_callback(rcl_timer_t * timer, int64_t last_call_time)
 {
 	if (timer != NULL) {
-		// Blink the LED1 (yellow) for debugging
-		//HAL_GPIO_TogglePin(LD2_GPIO_Port , LD2_Pin);
-
 		// Fill the message timestamp
 		struct timespec ts;
 		int64_t time_ns;
@@ -420,9 +422,9 @@ void timer_callback(rcl_timer_t * timer, int64_t last_call_time)
 		 battery_state_msg.capacity = 2.2;
 		 if (osMutexAcquire(batteryCellSocMutexHandle, 10) == osOK)
 		 {
-			 battery_state_msg.temperature = soc.temperature;
-			 battery_state_msg.voltage = soc.batteryCell[1].voltage + soc.batteryCell[0].voltage;
-			 battery_state_msg.current = soc.current;
+			 battery_state_msg.temperature = soc.ftemperature;
+			 battery_state_msg.voltage = soc.batteryCell[1].fvoltage + soc.batteryCell[0].fvoltage;
+			 battery_state_msg.current = soc.fcurrent;
 			 osMutexRelease(batteryCellSocMutexHandle);
 		 }
 		 rcl_ret_t ret = rcl_publish(&battery_state_pub, &battery_state_msg, NULL);
@@ -434,7 +436,14 @@ void timer_callback(rcl_timer_t * timer, int64_t last_call_time)
 
 	}
 }
-void microros_config()
+
+/* ***************************************************** */
+/* Method name: microrosConfig */
+/* Method description: Executes the configuration of the microros node  to the microros task */
+/* Input params: NA*/
+/* Output params: NA*/
+/* ***************************************************** */
+void microrosConfig()
 {
 	  rmw_uros_set_custom_transport(
 		true,
@@ -477,21 +486,28 @@ void microros_config()
 		  printf("Error on time sync (line %d)\n", __LINE__);
 
 }
+/* ***************************************************** */
+/* Method name: microrosMessageAllocation */
+/* Method description: Do the memory allocation to the microros message. In this case
+ * it is using the battery_state_msg*/
+/* Input params: NA*/
+/* Output params: NA*/
 
-void microros_message_allocation()
+/* ***************************************************** */
+void microrosMessageAllocation()
 {
 	  // battery_state_msg allocation
 	  battery_state_msg.header.frame_id.capacity = 20;
 	  battery_state_msg.header.frame_id.data = (char*) pvPortMalloc(battery_state_msg.header.frame_id.capacity  * sizeof(char));
 	  battery_state_msg.header.frame_id.size = strlen(battery_state_msg.header.frame_id.data);
 
-	  battery_state_msg.temperature = soc.temperature;
+	  battery_state_msg.temperature = soc.ftemperature;
 	  battery_state_msg.capacity =2.20;
 	  battery_state_msg.present = true;
 
 	  battery_state_msg.voltage = 0;
-	  battery_state_msg.current = soc.current;
-	  battery_state_msg.percentage = soc.percentage;
+	  battery_state_msg.current = soc.fcurrent;
+	  battery_state_msg.percentage = soc.fpercentage;
 	  battery_state_msg.power_supply_health = sensor_msgs__msg__BatteryState__POWER_SUPPLY_STATUS_DISCHARGING;
 	  battery_state_msg.power_supply_technology = sensor_msgs__msg__BatteryState__POWER_SUPPLY_TECHNOLOGY_LION;
 }
