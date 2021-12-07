@@ -91,8 +91,8 @@ typedef struct batteryCellSoc{
 } batterySoc;
 
 batterySoc soc;
-uint32_t now;
-uint32_t previous_time;
+uint32_t ui32now;
+uint32_t ui32previous_time;
 
 /*Micro-ros variables*/
 rcl_allocator_t freeRTOS_allocator;;
@@ -385,14 +385,14 @@ void SocTaskFunction(void *argument)
 	  if(osThreadFlagsWait(BATTERY_DATA_READY, osFlagsWaitAny, 200)!=osFlagsErrorTimeout)
 	  {
 		  // coulomb counting
-		  now = HAL_GetTick();
+		  ui32now = HAL_GetTick();
 		  if (osMutexAcquire(batteryCellSocMutexHandle, 10) == osOK)
 		  {
-			 float dsoc = soc.fcurrent*(now-previous_time)/(1000*3600); // time in msec
-			 soc.fpercentage = soc.fpercentage -(1/soc.fcapacity)*dsoc;
+			 float fdsoc = 0.150*(ui32now-ui32previous_time)/(1000); // time in msec
+			 soc.fpercentage -= (1/soc.fcapacity)*fdsoc;
 			 osMutexRelease(batteryCellSocMutexHandle);
 		  }
-		  previous_time = now;
+		  ui32previous_time = ui32now;
 		  osThreadFlagsSet(microROSTaskHandle, SOC_READY);
 	  }
     osDelay(1);
@@ -425,6 +425,7 @@ void timer_callback(rcl_timer_t * timer, int64_t last_call_time)
 			 battery_state_msg.temperature = soc.ftemperature;
 			 battery_state_msg.voltage = soc.batteryCell[1].fvoltage + soc.batteryCell[0].fvoltage;
 			 battery_state_msg.current = soc.fcurrent;
+			 battery_state_msg.percentage = soc.fpercentage;
 			 osMutexRelease(batteryCellSocMutexHandle);
 		 }
 		 rcl_ret_t ret = rcl_publish(&battery_state_pub, &battery_state_msg, NULL);
