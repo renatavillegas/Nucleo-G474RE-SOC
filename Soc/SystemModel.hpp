@@ -22,25 +22,25 @@ class State : public Kalman::Vector<T, 2>
 public:
     KALMAN_VECTOR(State, T, 2)
     
-    //! V1 - voltage in the first RC branch 
-    static constexpr size_t V1 = 0;
-    //! V2 - voltage in the second RC branch 
-    static constexpr size_t V2 = 0;
+    //! soc - State of charge
+    static constexpr size_t SOC = 0;
+    //! Vt - voltage in the RC branch 
+    static constexpr size_t VP = 0;
     
-    T v1()       const { return (*this)[ V1 ]; }
-    T v2()       const { return (*this)[ V2 ]; }
+    T soc()       const { return (*this)[ soc ]; }
+    T vp()       const { return (*this)[ vp ]; }
     
-    T& v1()      { return (*this)[ V1 ]; }
-    T& v2()      { return (*this)[ V2 ]; }
+    T& soc()      { return (*this)[ soc ]; }
+    T& vp()      { return (*this)[ vp ]; }
     // model params 
-    float T = 1;
+    float t = 1;
     float Cp = 2.2; 
     float a = 0.8; 
     float b= 3.6; 
     float Rt = 0.4; 
     float Rp = -0.09; 
-    float Cp = 715.6
-    float C_actual 
+    //float Cp = 715.6;
+    float C_actual; 
 };
 
 /**
@@ -146,7 +146,7 @@ protected:
         // partial derivative of x.vp() w.r.t. x.vp()
         this->F( S::VP, S::SOC ) = 0;
         // partial derivative of x.vp() w.r.t. x.theta()
-        this->F( S::VP, S::VP ) = exp(-T/(Rp*Cp));
+        this->F( S::VP, S::VP ) = exp(-t/(Rp*Cp));
                 
         // W = df/dw (Jacobian of state transition w.r.t. the noise)
         this->W.setIdentity();
