@@ -27,19 +27,11 @@ public:
     //! Vt - voltage in the RC branch 
     static constexpr size_t VP = 0;
     
-    T soc()       const { return (*this)[ soc ]; }
-    T vp()       const { return (*this)[ vp ]; }
+    T soc()       const { return (*this)[ SOC ]; }
+    T vp()       const { return (*this)[ VP ]; }
     
-    T& soc()      { return (*this)[ soc ]; }
-    T& vp()      { return (*this)[ vp ]; }
-    // model params 
-    float t = 1;
-    float Cp = 2.2; 
-    float a = 0.8; 
-    float b= 3.6; 
-    float Rt = 0.4; 
-    float Rp = -0.09; 
-    float C_actual; 
+    T& soc()      { return (*this)[ SOC ]; }
+    T& vp()      { return (*this)[ VP ]; }
 };
 
 /**
@@ -95,16 +87,24 @@ public:
      * @param [in] u The control vector input
      * @returns The (predicted) system state in the next time-step
      */
+            // model params 
+    float t = 1;
+    float Cp = 2.2; 
+    float a = 0.8; 
+    float b= 3.6; 
+    float Rt = 0.4; 
+    float Rp = -0.09; 
+    float C_actual= 2.2; 
     S f(const S& x, const C& u) const
     {
         //! Predicted state vector after transition
         S x_;
         
         // New soc
-        x_.soc() = x.soc() + 1/(this.C_actual)*u.i();
+        x_.soc() = x.soc() + 1/(C_actual)*u.i();
 
         // New vp
-        x_.vp() = exp(-this.t/(this.Rc*this.Cp))*x.vp() + 1/this.Cp*u.i();
+        x_.vp() = exp(-t/(Rp*Cp))*x.vp() + 1/Cp*u.i();
 
         // New x-position given by old x-position plus change in x-direction
         // Change in x-direction is given by the cosine of the (new) orientation
@@ -145,7 +145,7 @@ protected:
         // partial derivative of x.vp() w.r.t. x.vp()
         this->F( S::VP, S::SOC ) = 0;
         // partial derivative of x.vp() w.r.t. x.theta()
-        this->F( S::VP, S::VP ) = exp(-this.t/(this.Rp*this.Cp));
+        this->F( S::VP, S::VP ) = exp(-t/(Rp*Cp));
                 
         // W = df/dw (Jacobian of state transition w.r.t. the noise)
         this->W.setIdentity();

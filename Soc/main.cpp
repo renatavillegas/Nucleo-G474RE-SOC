@@ -8,7 +8,7 @@
 #include "SystemModel.hpp"
 //#include "OrientationMeasurementModel.hpp"
 //#include "PositionMeasurementModel.hpp"
-
+#include "CurrentMeasurementModel.hpp"
 #include <kalman/ExtendedKalmanFilter.hpp>
 #include <kalman/UnscentedKalmanFilter.hpp>
 
@@ -26,7 +26,7 @@ typedef Soc::State<T> State;
 typedef Soc::Control<T> Control;
 typedef Soc::SystemModel<T> SystemModel;
 
-typedef Soc::Current<T> CurrentMeasurement;
+typedef Soc::CurrentMeasurement<T> CurrentMeasurement;
 typedef Soc::CurrentMeasurementModel<T> CurrentModel;
 
 int main(int argc, char** argv)
@@ -70,14 +70,14 @@ int main(int argc, char** argv)
     for(size_t i = 1; i <= N; i++)
     {
         // Constant current discharge 1.6A_
-        u.i() = 1.6 
+        u.i() = 1.6; 
         
         // Simulate system
         x = sys.f(x, u);
         
         // Add noise: The system is affected by noise.
         x.soc() += systemNoise*noise(generator);
-        x.vt() += systemNoise*noise(generator);
+        x.vp() += systemNoise*noise(generator);
         
         
         // Predict state for current time-step using the filters
@@ -87,16 +87,16 @@ int main(int argc, char** argv)
         
         // Current measurement
         {
-            CurrentMeasurement current = im.i(x);
+            CurrentMeasurement current = im.h(x);
  
             // Update EKF
-            x_ekf = ekf.update(om, orientation);
+            x_ekf = ekf.update(im, current);
         }
                 
         // Print to stdout as csv format
-        std::cout   << x.soc() << "," << x.vt() << ","
-                    << x_pred.soc() << "," << x_pred.vt() << ","
-                    << x_ekf.soc() << "," << x_ekf.vt() << ","
+        std::cout   << x.soc() << "," << x.vp() << ","
+                    << x_pred.soc() << "," << x_pred.vp() << ","
+                    << x_ekf.soc() << "," << x_ekf.vp() << ","
                     << std::endl;
     }
     
