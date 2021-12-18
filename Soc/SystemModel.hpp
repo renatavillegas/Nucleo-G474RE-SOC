@@ -39,7 +39,6 @@ public:
     float b= 3.6; 
     float Rt = 0.4; 
     float Rp = -0.09; 
-    //float Cp = 715.6;
     float C_actual; 
 };
 
@@ -102,10 +101,10 @@ public:
         S x_;
         
         // New soc
-        x_.soc() = x.soc + 1/(C_actual)*u.i;
+        x_.soc() = x.soc() + 1/(this.C_actual)*u.i();
 
-        // New vt
-        x_.vt() =  a*x.soc + x.vp + Rt*u.i;
+        // New vp
+        x_.vp() = exp(-this.t/(this.Rc*this.Cp))*x.vp() + 1/this.Cp*u.i();
 
         // New x-position given by old x-position plus change in x-direction
         // Change in x-direction is given by the cosine of the (new) orientation
@@ -146,7 +145,7 @@ protected:
         // partial derivative of x.vp() w.r.t. x.vp()
         this->F( S::VP, S::SOC ) = 0;
         // partial derivative of x.vp() w.r.t. x.theta()
-        this->F( S::VP, S::VP ) = exp(-t/(Rp*Cp));
+        this->F( S::VP, S::VP ) = exp(-this.t/(this.Rp*this.Cp));
                 
         // W = df/dw (Jacobian of state transition w.r.t. the noise)
         this->W.setIdentity();
